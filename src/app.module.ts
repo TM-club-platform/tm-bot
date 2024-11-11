@@ -1,8 +1,8 @@
-import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { MongooseModule } from '@nestjs/mongoose';
-import { TelegrafModule } from 'nestjs-telegraf';
-import { BotModule } from './bot/bot.module';
+import { Module } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
+import { MongooseModule } from "@nestjs/mongoose";
+import { TelegrafModule } from "nestjs-telegraf";
+import { BotModule } from "./bot/bot.module";
 
 @Module({
   imports: [
