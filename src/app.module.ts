@@ -10,9 +10,9 @@ import { BotModule } from "./bot/bot.module";
       isGlobal: true,
     }),
     MongooseModule.forRoot(process.env.MONGODB_URI),
-    TelegrafModule.forRoot({
-      token: process.env.BOT_TOKEN,
-    }),
+    // TelegrafModule.forRoot({
+    //   token: process.env.BOT_TOKEN,
+    // }),
     BotModule,
   ],
 })

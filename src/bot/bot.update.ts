@@ -1,10 +1,16 @@
-import { Start, Update, Ctx, On, Action } from "nestjs-telegraf";
-import { Context, Markup } from "telegraf";
+import { Start, Update, Action, InjectBot, Wizard } from "nestjs-telegraf";
+import { Context, Scenes, Telegraf } from "telegraf";
 import { BotService } from "./bot.service";
+import { WizardContext } from "telegraf/typings/scenes";
+import { Injectable } from "@nestjs/common";
 
 @Update()
+@Injectable()
 export class BotUpdate {
-  constructor(private readonly botService: BotService) {}
+  constructor(
+    private readonly botService: BotService,
+    @InjectBot() private bot: Telegraf<Context>
+  ) {}
 
   @Start()
   async startCommand(ctx: Context): Promise<void> {
@@ -35,7 +41,6 @@ export class BotUpdate {
           "Мы сделали ограничение по времени, чтобы здесь смогли встретиться люди, которые действительно заинтересованы в общении, открыты к новым знакомствам и эмоциям"
       );
 
-      // Send welcome picture
       await ctx.replyWithPhoto(
         { source: "./assets/how_to_works.jpeg" },
         {
@@ -53,12 +58,7 @@ export class BotUpdate {
   }
 
   @Action("fill_form")
-  async onFillForm(ctx: Context) {
-    await ctx.reply('Ну чо привет бро!');
-  }
-
-  @On("text")
-  async onMessage(@Ctx() ctx: Context) {
-    return "I received your message!";
+  async startWizard(ctx: WizardContext) {
+    await ctx.scene.enter("registration-wizard");
   }
 }
