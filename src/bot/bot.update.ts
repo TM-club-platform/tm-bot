@@ -20,15 +20,13 @@ export class BotUpdate {
       // Check if user exists in database
       let existingUser = await this.botService.findUser(user.id);
 
-      // If user doesn't exist, create new user
       if (!existingUser) {
-        existingUser = await this.botService.createUser(
-          user.id,
-          user.first_name,
-          user.last_name,
-          user.username
-        );
+        existingUser = await this.botService.createOrUpdateUser({
+          telegramId: user.id,
+          name: user.first_name + " " + user.last_name,
+        });
       }
+      
 
       // Send welcome picture
       await ctx.replyWithPhoto({ source: "./assets/welcome.jpeg" });

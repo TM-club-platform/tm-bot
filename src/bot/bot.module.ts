@@ -6,6 +6,12 @@ import { MongooseModule } from "@nestjs/mongoose";
 import { User, UserSchema } from "./schemas/user.schema";
 import { session } from "telegraf";
 import { RegistrationScene } from "./scenes/registration-wizard";
+import { TraitsHandler } from "./scenes/handlers/traits.handler";
+import { AgeStepHandler } from "./scenes/handlers/age.handler";
+import { NameStepHandler } from "./scenes/handlers/name.handler";
+import { HobbiesHandler } from "./scenes/handlers/hobbies.handler";
+import { TopicsHandler } from "./scenes/handlers/topics.handler";
+import { CountriesHandler } from "./scenes/handlers/countries.handler";
 
 @Module({
   imports: [
@@ -28,6 +34,16 @@ import { RegistrationScene } from "./scenes/registration-wizard";
     }),
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
   ],
-  providers: [BotUpdate, BotService, RegistrationScene],
+  providers: [
+    BotUpdate,
+    BotService,
+    RegistrationScene,
+    TraitsHandler,
+    HobbiesHandler,
+    TopicsHandler,
+    AgeStepHandler,
+    NameStepHandler,
+    CountriesHandler,
+  ],
 })
 export class BotModule {}
