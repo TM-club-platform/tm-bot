@@ -28,13 +28,12 @@ interface UsersByCountry {
 @Injectable()
 export class SheetsSchedulerService {
   private readonly logger = new Logger(SheetsSchedulerService.name);
-  private readonly SPREADSHEET_ID =
-    "14M7FwdzdM-vrnwBeKOrLaXgRn9HINkI_D0Pt5TK4BzU";
+  private readonly SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID;
   private readonly SHEET_RANGE = "A1:P200"; // Adjust range based on your needs
 
   constructor(private readonly sheetsService: SheetsService) {}
 
-  @Cron(CronExpression.EVERY_MINUTE)
+  @Cron(process.env.CRON_EXPRESSION || CronExpression.EVERY_DAY_AT_10AM)
   async handleCron() {
     try {
       this.logger.debug("Starting scheduled sheet data processing");
