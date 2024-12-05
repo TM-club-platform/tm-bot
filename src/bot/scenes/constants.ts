@@ -13,6 +13,7 @@ export const WIZARD_CONSTANTS = {
     NO_HOBBIES_SELECTED: "Вы не выбрали ни одного хобби",
     MAX_TOPICS_REACHED: "Достигнуто максимальное количество выбранных пунктов.",
     NO_TOPICS_SELECTED: "Вы не выбрали ни одного интереса",
+    MAX_LOCATION_REACHED: "Можно выбрать только одну локацию",
   },
   BUTTONS: {
     DONE_TRAITS: {
@@ -27,14 +28,34 @@ export const WIZARD_CONSTANTS = {
       label: "Готово!",
       name: "done",
     },
+    DONE_COUNTRY: {
+      label: "Подтвердить страну",
+      name: "done-country",
+    },
+    DONE_DISTRICT: {
+      label: "Подтвердить район",
+      name: "done-district",
+    },
   },
 } as const;
 
 export const COUNTRIES = [
-  { name: "Thailand", code: "TH", emoji: "🇹🇭" },
-  { name: "Indonesia", code: "ID", emoji: "🇮🇩" },
-  { name: "Vietnam", code: "VN", emoji: "🇻🇳" },
-  { name: "Singapore", code: "SG", emoji: "🇸🇬" },
-  { name: "Malaysia", code: "MY", emoji: "🇲🇾" },
-  // Add more countries as needed
-] as const;
+  {
+    label: "🇹🇭 Таиланд",
+    name: "country-thailand",
+    districts: [
+      { label: "Бангкок", name: "district-bangkok" },
+      { label: "Пхукет", name: "district-phuket" },
+      { label: "Самуи", name: "district-samui" },
+    ],
+  },
+  {
+    label: "🇮🇩 Бали",
+    name: "country-bali",
+    districts: [
+      { label: "Чангу", name: "district-canggu" },
+      { label: "Убуд", name: "district-ubud" },
+      { label: "Семиньяк", name: "district-seminyak" },
+    ],
+  },
+];

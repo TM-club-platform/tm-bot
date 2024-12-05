@@ -23,12 +23,18 @@ export interface UserData {
   countries?: string;
   info?: string;
   instagram?: string;
+  country?: string;
+  district?: string;
+  description?: string;
+  photo?: string;
 }
 
 export interface WizardSession extends Scenes.WizardSessionData {
   selectedTraits: string[];
   selectedHobbies: string[];
   selectedTopics: string[];
+  selectedCountry?: string;
+  selectedDistrict?: string;
   currentStep?: WizardStepData;
   [key: string]: any;
 }

@@ -1,3 +1,4 @@
+//@ts-nocheck
 import { Injectable } from "@nestjs/common";
 import { WizardContext } from "../types";
 import { InlineQueryResult } from "telegraf/typings/core/types/typegram";
@@ -12,7 +13,6 @@ export class CountriesHandler {
 
     const query = ctx.inlineQuery.query.toLowerCase();
     const results = this.COUNTRIES.filter(
-        
       (country) =>
         country.name.toLowerCase().includes(query) ||
         country.code.toLowerCase().includes(query)

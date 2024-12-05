@@ -2,8 +2,10 @@ import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { getBotToken } from "nestjs-telegraf";
 import { Telegraf } from "telegraf";
+import "dotenv/config";
 
 async function bootstrap() {
+  console.log("MongoDB URI:", process.env.MONGODB_URI);
   const app = await NestFactory.create(AppModule);
 
   // Get bot instance

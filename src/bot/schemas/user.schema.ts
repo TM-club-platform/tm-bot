@@ -44,6 +44,24 @@ export class User extends Document {
 
   @Prop({ default: Date.now })
   createdAt: Date;
+
+  @Prop({ type: [Number], default: [] })
+  matchedWith: number[];
+
+  @Prop({ default: null })
+  participationDelay: Date;
+
+  @Prop({ default: true })
+  isParticipating: boolean;
+
+  @Prop({ default: null })
+  lastParticipationCheck: Date;
+
+  @Prop()
+  profilePhoto: string;
+
+  @Prop()
+  originalPhoto: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

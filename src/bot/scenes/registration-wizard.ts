@@ -17,7 +17,9 @@ import { SelectionContext, WizardContext } from "./types";
 import { TraitsHandler } from "./handlers/traits.handler";
 import { HobbiesHandler } from "./handlers/hobbies.handler";
 import { TopicsHandler } from "./handlers/topics.handler";
-import { CountriesHandler } from "./handlers/countries.handler";
+import { LocationHandler } from "./handlers/location.handler";
+import { TextAnketaHandler } from "./handlers/textAnketa.handler";
+import { PhotoHandler } from "./handlers/photo.handler";
 @Update()
 @Injectable()
 @Wizard("registration-wizard")
@@ -28,17 +30,19 @@ export class RegistrationScene {
     private readonly traitsHandler: TraitsHandler,
     private readonly hobbiesHandler: HobbiesHandler,
     private readonly topicsHandler: TopicsHandler,
-    private readonly countriesHandler: CountriesHandler,
+    private readonly locationHandler: LocationHandler,
+    private readonly textAnketaHandler: TextAnketaHandler,
+    private readonly photoHandler: PhotoHandler,
     private readonly botService: BotService,
     @InjectBot() private bot: Telegraf<any>
   ) {}
 
   private initializeState(ctx: WizardContext) {
-    ctx.wizard.state.userData = { 
+    ctx.wizard.state.userData = {
       telegramId: ctx.from.id,
-      traits: [], 
-      hobbies: [], 
-      topics: [] 
+      traits: [],
+      hobbies: [],
+      topics: [],
     };
     ctx.session.selectedTraits = [];
     ctx.session.selectedHobbies = [];
@@ -120,21 +124,71 @@ export class RegistrationScene {
   async handleDoneTopics(@Ctx() ctx: WizardContext) {
     const success = await this.topicsHandler.handleDoneTopics(ctx);
     if (success) {
-      await this.promptForCountries(ctx);
+      await this.chooseLocation(ctx);
       // @ts-ignore
       ctx.wizard.selectStep(10);
     }
   }
 
   @WizardStep(11)
-  async chooseCountries(@Ctx() ctx: WizardContext) {
-    if (!this.hasValidTextMessage(ctx)) return;
-    ctx.wizard.state.userData.countries = ctx.message.text;
-    await this.promptForInfo(ctx);
+  async chooseLocation(@Ctx() ctx: WizardContext) {
+    await this.locationHandler.promptForCountrySelection(ctx);
     ctx.wizard.next();
   }
 
   @WizardStep(12)
+  @Action(/country-(.+)/)
+  async handleCountrySelection(@Ctx() ctx: SelectionContext) {
+    const success = await this.locationHandler.handleCountrySelection(ctx);
+    if (!success) {
+      await ctx.reply("Произошла ошибка при выборе страны");
+      return;
+    }
+    await this.locationHandler.promptForDistrictSelection(ctx);
+    ctx.wizard.next();
+  }
+
+  @WizardStep(13)
+  @Action(/district-(.+)/)
+  async handleDistrictSelection(@Ctx() ctx: SelectionContext) {
+    const success = await this.locationHandler.handleDistrictSelection(ctx);
+    if (!success) {
+      await ctx.reply("Произошла ошибка при выборе района");
+      return;
+    }
+
+    ctx.wizard.state.userData.country = ctx.session.selectedCountry;
+    ctx.wizard.state.userData.district = ctx.session.selectedDistrict;
+    await this.textAnketaHandler.promptForDescription(ctx);
+    ctx.wizard.next();
+  }
+
+  @WizardStep(16)
+  async getDescription(@Ctx() ctx: WizardContext) {
+    if (!this.hasValidTextMessage(ctx)) return;
+
+    const success = await this.textAnketaHandler.handleDescription(ctx);
+    if (success) {
+      await this.promptForInstagram(ctx);
+      ctx.wizard.next();
+    }
+  }
+
+  @WizardStep(17)
+  async getPhoto(@Ctx() ctx: WizardContext) {
+    if (!ctx.message || !("photo" in ctx.message)) {
+      await this.photoHandler.promptForPhoto(ctx);
+      return;
+    }
+
+    const success = await this.photoHandler.handlePhoto(ctx);
+    if (success) {
+      await this.promptForInstagram(ctx);
+      ctx.wizard.next();
+    }
+  }
+
+  @WizardStep(40)
   async getInfo(@Ctx() ctx: WizardContext) {
     if (!this.hasValidTextMessage(ctx)) return;
 
@@ -157,11 +211,15 @@ export class RegistrationScene {
         instagram: ctx.wizard.state.userData.instagram,
       });
 
-      await ctx.reply("Создаем твою анкету. Подожди несколько минут, чтобы произошла магия 🪄🔮");
+      await ctx.reply(
+        "Создаем твою анкету. Подожди несколько минут, чтобы произошла магия 🪄🔮"
+      );
       return ctx.scene.leave();
     } catch (error) {
       console.error("Error creating/updating user:", error);
-      await ctx.reply("Произошла ошибка при создании анкеты. Пожалуйста, попробуйте позже.");
+      await ctx.reply(
+        "Произошла ошибка при создании анкеты. Пожалуйста, попробуйте позже."
+      );
       return ctx.scene.leave();
     }
   }
