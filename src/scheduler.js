@@ -1,97 +1,95 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { Cron, CronExpression } from "@nestjs/schedule";
-import { SheetsService } from "./sheets.service";
+require("dotenv").config();
 
-interface User {
-  id: string;
-  username: string;
-  name: string;
-  goal: string;
-  gender: string;
-  country: string;
-  region: string;
-  interests: number[];
-  similarInterests: string;
-  announcement: string;
-  profile: string;
-  placesToVisit: string;
-  instagram: string;
-  skip: number;
-  previousMatch: string[];
-  nextMatch?: string;
-}
+const { google } = require("googleapis");
 
-interface UsersByCountry {
-  [country: string]: User[];
-}
+class SheetsScheduler {
+  constructor() {
+    this.SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID;
+    this.SHEET_RANGE = "A1:P200";
+    this.auth = null;
+  }
 
-@Injectable()
-export class SheetsSchedulerService {
-  private readonly logger = new Logger(SheetsSchedulerService.name);
-  private readonly SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID;
-  private readonly SHEET_RANGE = "A1:P200"; // Adjust range based on your needs
-
-  constructor(private readonly sheetsService: SheetsService) {}
-
-  @Cron(process.env.CRON_EXPRESSION || CronExpression.EVERY_DAY_AT_10AM)
-  async handleCron() {
+  async initialize() {
     try {
-      this.logger.debug("Starting scheduled sheet data processing");
-
-      // Read data from sheet
-      const data = await this.sheetsService.readSheetData(
-        this.SPREADSHEET_ID,
-        this.SHEET_RANGE
-      );
-
-      if (!data || !data.length) {
-        this.logger.warn("No data found in sheet");
-        return;
-      }
-
-      // Process the data
-      const processedData = this.processSheetData(data);
-
-      // Update specific columns if needed
-      await this.updateProcessedData(processedData);
-
-      this.logger.debug("Finished processing sheet data");
+      this.auth = new google.auth.GoogleAuth({
+        credentials: {
+          client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+          private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+        },
+        scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+      });
     } catch (error) {
-      this.logger.error(`Error processing sheet data: ${error.message}`);
+      console.error("Failed to initialize Google Auth:", error);
+      throw error;
     }
   }
 
-  private parseArrayString(arrayString: string) {
+  async processSheet() {
+    try {
+      console.log("Starting sheet data processing");
+
+      const data = await this.readSheetData();
+
+      if (!data || !data.length) {
+        console.warn("No data found in sheet");
+        return;
+      }
+
+      const processedData = this.processSheetData(data);
+      await this.updateProcessedData(processedData);
+
+      console.log("Finished processing sheet data");
+    } catch (error) {
+      console.error(`Error processing sheet data: ${error.message}`);
+    }
+  }
+
+  async readSheetData() {
+    const sheets = google.sheets({ version: "v4", auth: this.auth });
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: this.SPREADSHEET_ID,
+      range: this.SHEET_RANGE,
+    });
+    return response.data.values;
+  }
+
+  async updateSheetData(range, values) {
+    const sheets = google.sheets({ version: "v4", auth: this.auth });
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: this.SPREADSHEET_ID,
+      range: range,
+      valueInputOption: "RAW",
+      resource: { values },
+    });
+  }
+
+  parseArrayString(arrayString) {
     return arrayString
       .replace(/[\[\]]/g, "")
       .split(",")
       .map(Number);
   }
 
-  private calculateCompatibilityScore(user1: any, user2: any): number {
+  calculateCompatibilityScore(user1, user2) {
     let score = 0;
 
-    // Compare regions (weight: 2)
     if (user1.region && user2.region && user1.region === user2.region) {
       score += 2;
     }
 
-    // Compare interests (weight: 1)
     if (user1.interests && user2.interests) {
       const interests1 = user1.interests;
       const interests2 = user2.interests;
-
       const commonInterests = interests1.filter((interest) =>
         interests2.includes(interest)
       );
-
       score += commonInterests.length;
     }
 
     return score;
   }
 
-  private findBestMatch(user: any, availableUsers: any[]): string {
+  findBestMatch(user, availableUsers) {
     let bestMatch = null;
     let bestScore = -1;
 
@@ -111,7 +109,7 @@ export class SheetsSchedulerService {
     return bestMatch?.id;
   }
 
-  private mapRowToUser(row: any[]): User {
+  mapRowToUser(row) {
     return {
       id: row[0],
       username: row[1],
@@ -132,8 +130,8 @@ export class SheetsSchedulerService {
     };
   }
 
-  private groupUsersByCountry(users: User[]): UsersByCountry {
-    return users.reduce((acc: UsersByCountry, user) => {
+  groupUsersByCountry(users) {
+    return users.reduce((acc, user) => {
       if (!acc[user.country]) {
         acc[user.country] = [];
       }
@@ -142,8 +140,8 @@ export class SheetsSchedulerService {
     }, {});
   }
 
-  private findMatchesForCountry(countryUsers: User[]): Map<string, string> {
-    const matches = new Map<string, string>();
+  findMatchesForCountry(countryUsers) {
+    const matches = new Map();
 
     const shuffledUsers = [...countryUsers]
       .filter((user) => !user.skip)
@@ -168,7 +166,7 @@ export class SheetsSchedulerService {
           (id) => id !== matchId && id !== currentUser.id
         );
       } else {
-        this.logger.warn(
+        console.warn(
           `No match found for user ${currentUser.id} in ${currentUser.country}`
         );
       }
@@ -177,11 +175,7 @@ export class SheetsSchedulerService {
     return matches;
   }
 
-  private findMatchForUser(
-    user: User,
-    allUsers: User[],
-    availableIds: string[]
-  ): string | null {
+  findMatchForUser(user, allUsers, availableIds) {
     const availableUsers = allUsers.filter(
       (u) =>
         availableIds.includes(u.id) &&
@@ -194,18 +188,16 @@ export class SheetsSchedulerService {
     return this.findBestMatch(user, availableUsers);
   }
 
-  private processSheetData(data: any[][]): User[] {
+  processSheetData(data) {
     const [headers, ...rows] = data;
-    const users: User[] = rows.map((row) => this.mapRowToUser(row));
+    const users = rows.map((row) => this.mapRowToUser(row));
     const usersByCountry = this.groupUsersByCountry(users);
 
-    // Process matches for each country
     for (const country in usersByCountry) {
       const countryMatches = this.findMatchesForCountry(
         usersByCountry[country]
       );
 
-      // Assign matches back to users
       usersByCountry[country].forEach((user) => {
         user.nextMatch = countryMatches.get(user.id) || undefined;
       });
@@ -214,20 +206,25 @@ export class SheetsSchedulerService {
     return users;
   }
 
-  private async updateProcessedData(processedData: any[]) {
+  async updateProcessedData(processedData) {
     try {
-      // Example: Update a specific column with processed results
-      const updateRange = "P2:P200"; // Example: updating 'Skip' column
+      const updateRange = "P2:P200";
       const valuesToUpdate = processedData.map((row) => [row.nextMatch || ""]);
 
-      await this.sheetsService.updateSheetData(
-        this.SPREADSHEET_ID,
-        updateRange,
-        valuesToUpdate
-      );
+      await this.updateSheetData(updateRange, valuesToUpdate);
     } catch (error) {
-      this.logger.error(`Error updating processed data: ${error.message}`);
+      console.error(`Error updating processed data: ${error.message}`);
       throw error;
     }
   }
 }
+
+// Usage example:
+async function main() {
+  const scheduler = new SheetsScheduler();
+  await scheduler.initialize();
+  await scheduler.processSheet();
+}
+
+// Run the script
+main().catch(console.error);
