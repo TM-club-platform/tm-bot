@@ -26,7 +26,7 @@ jobs:
           mkdir -p ~/.ssh
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh -o StrictHostKeyChecking=no username@your_server_ip << 'EOF'
+          ssh -o StrictHostKeyChecking=no root@@162.55.219.246 << 'EOF'
             cd /var/www/tg_match/tm-bot
             npm install
             npm run start
