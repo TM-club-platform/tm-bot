@@ -1,20 +1,23 @@
-name: Weekly Job for tm-bot
+name: Scheduled Job
 
 on:
   schedule:
     # Запуск каждую среду в 7:30 утра по UTC
     - cron: '30 7 * * 3'
 
+  push:
+    branches:
+      - scheduler # Срабатывает, если происходит push в ветку scheduler
+
 jobs:
   run-on-server:
+    if: github.ref == 'refs/heads/scheduler' # Проверяет, что текущая ветка scheduler
     runs-on: ubuntu-latest
 
     steps:
-      # Шаг 1: Проверяем исходный код (необязательно, если работа идёт только на сервере)
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Шаг 2: Подключаемся к серверу и выполняем команды
       - name: Execute commands on server
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
