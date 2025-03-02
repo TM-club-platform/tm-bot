@@ -78,8 +78,8 @@ class SheetsScheduler {
     }
 
     if (user1.interests && user2.interests) {
-      const interests1 = user1.interests;
-      const interests2 = user2.interests;
+      const interests1 = Array.isArray(user1.interests) ? user1.interests : [];
+      const interests2 = Array.isArray(user2.interests) ? user2.interests : [];
       const commonInterests = interests1.filter((interest) =>
         interests2.includes(interest)
       );
@@ -146,7 +146,7 @@ class SheetsScheduler {
     const shuffledUsers = [...countryUsers]
       .filter((user) => !user.skip)
       .sort(() => Math.random() - 0.5);
-    let availableIds = shuffledUsers.map((user) => user.id);
+    let availableIds = new Set(shuffledUsers.map((user) => user.id));
 
     for (let i = 0; i < shuffledUsers.length; i++) {
       const currentUser = shuffledUsers[i];
@@ -156,15 +156,25 @@ class SheetsScheduler {
       const matchId = this.findMatchForUser(
         currentUser,
         shuffledUsers,
-        availableIds
+        availableIds,
+        matches
       );
 
       if (matchId) {
         matches.set(currentUser.id, matchId);
         matches.set(matchId, currentUser.id);
-        availableIds = availableIds.filter(
-          (id) => id !== matchId && id !== currentUser.id
-        );
+
+        currentUser.previousMatch = currentUser.previousMatch || [];
+        currentUser.previousMatch.push(matchId);
+
+        const matchedUser = shuffledUsers.find((u) => u.id === matchId);
+        if (matchedUser) {
+          matchedUser.previousMatch = matchedUser.previousMatch || [];
+          matchedUser.previousMatch.push(currentUser.id);
+        }
+
+        availableIds.delete(matchId);
+        availableIds.delete(currentUser.id);
       } else {
         console.warn(
           `No match found for user ${currentUser.id} in ${currentUser.country}`
@@ -175,12 +185,14 @@ class SheetsScheduler {
     return matches;
   }
 
-  findMatchForUser(user, allUsers, availableIds) {
+  findMatchForUser(user, allUsers, availableIds, matches) {
     const availableUsers = allUsers.filter(
       (u) =>
-        availableIds.includes(u.id) &&
+        availableIds.has(u.id) &&
         u.id !== user.id &&
-        (!user.previousMatch || !user.previousMatch.includes(u.id))
+        !matches.has(u.id) &&
+        !(user.previousMatch || []).includes(u.id) &&
+        !(u.previousMatch || []).includes(user.id)
     );
 
     if (availableUsers.length === 0) return null;
@@ -228,3 +240,5 @@ async function main() {
 
 // Run the script
 main().catch(console.error);
+
+module.exports = SheetsScheduler;
