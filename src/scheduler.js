@@ -1,31 +1,29 @@
 require("dotenv").config();
 
 const { google } = require("googleapis");
+const BaseSheetsOperator = require("./baseSheets");
+const {
+  CONSTANTS,
+  parseArrayString,
+  mapRowToUser,
+  groupUsersByCountry,
+  groupUsersByRegion,
+} = require("./utils");
 
-const countriesWithoutRestrictedRegions = ["Бали", "Шри-Ланка"];
-
-class SheetsScheduler {
+/**
+ * Class for scheduling user matches from Google Sheets data
+ */
+class SheetsScheduler extends BaseSheetsOperator {
   constructor() {
+    super();
     this.SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID;
     this.SHEET_RANGE = "A1:P200";
-    this.auth = null;
   }
 
-  async initialize() {
-    try {
-      this.auth = new google.auth.GoogleAuth({
-        credentials: {
-          client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-          private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"),
-        },
-        scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-      });
-    } catch (error) {
-      console.error("Failed to initialize Google Auth:", error);
-      throw error;
-    }
-  }
-
+  /**
+   * Process the Google Sheet to match users
+   * @throws {Error} If processing fails
+   */
   async processSheet() {
     try {
       console.log("Starting sheet data processing");
@@ -43,42 +41,25 @@ class SheetsScheduler {
       console.log("Finished processing sheet data");
     } catch (error) {
       console.error(`Error processing sheet data: ${error.message}`);
+      throw error;
     }
   }
 
-  async readSheetData() {
-    const sheets = google.sheets({ version: "v4", auth: this.auth });
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: this.SPREADSHEET_ID,
-      range: this.SHEET_RANGE,
-    });
-    return response.data.values;
-  }
-
-  async updateSheetData(range, values) {
-    const sheets = google.sheets({ version: "v4", auth: this.auth });
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: this.SPREADSHEET_ID,
-      range: range,
-      valueInputOption: "RAW",
-      resource: { values },
-    });
-  }
-
-  parseArrayString(arrayString) {
-    return arrayString
-      .replace(/[\[\]]/g, "")
-      .split(",")
-      .map(Number);
-  }
-
+  /**
+   * Calculate compatibility score between two users
+   * @param {Object} user1 - First user
+   * @param {Object} user2 - Second user
+   * @returns {number} Compatibility score
+   */
   calculateCompatibilityScore(user1, user2) {
     let score = 0;
 
+    // Add points for same region
     if (user1.region && user2.region && user1.region === user2.region) {
       score += 2;
     }
 
+    // Add points for common interests
     if (user1.interests && user2.interests) {
       const interests1 = Array.isArray(user1.interests) ? user1.interests : [];
       const interests2 = Array.isArray(user2.interests) ? user2.interests : [];
@@ -91,7 +72,15 @@ class SheetsScheduler {
     return score;
   }
 
+  /**
+   * Find the best match for a user from available users
+   * @param {Object} user - User to find match for
+   * @param {Array} availableUsers - Array of available users
+   * @returns {string|null} ID of best match or null if no match found
+   */
   findBestMatch(user, availableUsers) {
+    if (!availableUsers.length) return null;
+
     let bestMatch = null;
     let bestScore = -1;
 
@@ -103,6 +92,7 @@ class SheetsScheduler {
       }
     }
 
+    // If no good match found, pick a random one
     if (!bestMatch && availableUsers.length > 0) {
       bestMatch =
         availableUsers[Math.floor(Math.random() * availableUsers.length)];
@@ -111,58 +101,25 @@ class SheetsScheduler {
     return bestMatch?.id;
   }
 
-  mapRowToUser(row) {
-    return {
-      id: row[0],
-      username: row[1],
-      name: row[2],
-      goal: row[3],
-      gender: row[4],
-      country: row[5],
-      region: row[6],
-      interests: row[7] ? this.parseArrayString(row[7]) : [],
-      similarInterests: row[8],
-      announcement: row[9],
-      profile: row[10],
-      placesToVisit: row[11],
-      instagram: row[12],
-      skip: Number(row[13]),
-      previousMatch: row[14] ? JSON.parse(row[14]) : [],
-      nextMatch: row[15],
-    };
-  }
-
-  groupUsersByCountry(users) {
-    return users.reduce((acc, user) => {
-      if (!acc[user.country]) {
-        acc[user.country] = [];
-      }
-      acc[user.country].push(user);
-      return acc;
-    }, {});
-  }
-
-  groupUsersByRegion(users) {
-    return users.reduce((acc, user) => {
-      if (!acc[user.region]) {
-        acc[user.region] = [];
-      }
-      acc[user.region].push(user);
-      return acc;
-    }, {});
-  }
-
-  findMatchesInGroup(countryUsers) {
+  /**
+   * Find matches for users in a group
+   * @param {Array} groupUsers - Array of users in a group
+   * @returns {Map} Map of user IDs to match IDs
+   */
+  findMatchesInGroup(groupUsers) {
     const matches = new Map();
 
-    const shuffledUsers = [...countryUsers]
+    // Filter out users who want to skip and shuffle for randomness
+    const shuffledUsers = [...groupUsers]
       .filter((user) => !user.skip)
       .sort(() => Math.random() - 0.5);
+
     let availableIds = new Set(shuffledUsers.map((user) => user.id));
 
     for (let i = 0; i < shuffledUsers.length; i++) {
       const currentUser = shuffledUsers[i];
 
+      // Skip if user already has a match
       if (!currentUser || matches.has(currentUser.id)) continue;
 
       const matchId = this.findMatchForUser(
@@ -173,20 +130,13 @@ class SheetsScheduler {
       );
 
       if (matchId) {
-        matches.set(currentUser.id, matchId);
-        matches.set(matchId, currentUser.id);
-
-        currentUser.previousMatch = currentUser.previousMatch || [];
-        currentUser.previousMatch.push(matchId);
-
-        const matchedUser = shuffledUsers.find((u) => u.id === matchId);
-        if (matchedUser) {
-          matchedUser.previousMatch = matchedUser.previousMatch || [];
-          matchedUser.previousMatch.push(currentUser.id);
-        }
-
-        availableIds.delete(matchId);
-        availableIds.delete(currentUser.id);
+        this.recordMatch(
+          currentUser,
+          matchId,
+          shuffledUsers,
+          matches,
+          availableIds
+        );
       } else {
         console.warn(
           `No match found for user ${currentUser.id} in ${currentUser.country}`
@@ -197,7 +147,44 @@ class SheetsScheduler {
     return matches;
   }
 
+  /**
+   * Record a match between two users
+   * @param {Object} user - User to match
+   * @param {string} matchId - ID of matched user
+   * @param {Array} allUsers - Array of all users
+   * @param {Map} matches - Map of user IDs to match IDs
+   * @param {Set} availableIds - Set of available user IDs
+   */
+  recordMatch(user, matchId, allUsers, matches, availableIds) {
+    // Record the match in both directions
+    matches.set(user.id, matchId);
+    matches.set(matchId, user.id);
+
+    // Update previous matches for both users
+    user.previousMatch = user.previousMatch || [];
+    user.previousMatch.push(matchId);
+
+    const matchedUser = allUsers.find((u) => u.id === matchId);
+    if (matchedUser) {
+      matchedUser.previousMatch = matchedUser.previousMatch || [];
+      matchedUser.previousMatch.push(user.id);
+    }
+
+    // Remove both users from available pool
+    availableIds.delete(matchId);
+    availableIds.delete(user.id);
+  }
+
+  /**
+   * Find a match for a specific user
+   * @param {Object} user - User to find match for
+   * @param {Array} allUsers - Array of all users
+   * @param {Set} availableIds - Set of available user IDs
+   * @param {Map} matches - Map of user IDs to match IDs
+   * @returns {string|null} ID of matched user or null if no match found
+   */
   findMatchForUser(user, allUsers, availableIds, matches) {
+    // Filter available users who haven't been matched and haven't matched with this user before
     const availableUsers = allUsers.filter(
       (u) =>
         availableIds.has(u.id) &&
@@ -212,22 +199,29 @@ class SheetsScheduler {
     return this.findBestMatch(user, availableUsers);
   }
 
+  /**
+   * Process sheet data to create matches
+   * @param {Array} data - Sheet data as array of rows
+   * @returns {Array} Processed user objects with matches
+   */
   processSheetData(data) {
     const [headers, ...rows] = data;
-    const users = rows.map((row) => this.mapRowToUser(row));
-    const usersByCountry = this.groupUsersByCountry(users);
+    const users = rows.map(mapRowToUser);
+    const usersByCountry = groupUsersByCountry(users);
 
+    // Process each country
     for (const country in usersByCountry) {
-      let countryMatches = [];
-      if (!countriesWithoutRestrictedRegions.includes(country)) {
-        const usersByRegion = this.groupUsersByRegion(usersByCountry[country]);
-        for (const region in usersByRegion) {
-          countryMatches = this.findMatchesInGroup(usersByRegion[region]);
-        }
+      let countryMatches;
+
+      if (!CONSTANTS.COUNTRIES_WITHOUT_RESTRICTED_REGIONS.includes(country)) {
+        // For countries with region restrictions, match within regions
+        countryMatches = this.matchUsersWithinRegions(usersByCountry[country]);
       } else {
+        // For countries without region restrictions, match within country
         countryMatches = this.findMatchesInGroup(usersByCountry[country]);
       }
 
+      // Update next match for each user in the country
       usersByCountry[country].forEach((user) => {
         user.nextMatch = countryMatches.get(user.id) || undefined;
       });
@@ -236,6 +230,33 @@ class SheetsScheduler {
     return users;
   }
 
+  /**
+   * Match users within regions of a country
+   * @param {Array} countryUsers - Array of users in a country
+   * @returns {Map} Map of user IDs to match IDs
+   */
+  matchUsersWithinRegions(countryUsers) {
+    const usersByRegion = groupUsersByRegion(countryUsers);
+    const allMatches = new Map();
+
+    // Process each region
+    for (const region in usersByRegion) {
+      const regionMatches = this.findMatchesInGroup(usersByRegion[region]);
+
+      // Merge region matches into all matches
+      for (const [userId, matchId] of regionMatches.entries()) {
+        allMatches.set(userId, matchId);
+      }
+    }
+
+    return allMatches;
+  }
+
+  /**
+   * Update processed data in the sheet
+   * @param {Array} processedData - Array of user objects with matches
+   * @throws {Error} If updating processed data fails
+   */
   async updateProcessedData(processedData) {
     try {
       const updateRange = "P2:P200";
@@ -249,14 +270,23 @@ class SheetsScheduler {
   }
 }
 
-// Usage example:
+/**
+ * Main function to run the scheduler
+ */
 async function main() {
-  const scheduler = new SheetsScheduler();
-  await scheduler.initialize();
-  await scheduler.processSheet();
+  try {
+    const scheduler = new SheetsScheduler();
+    await scheduler.initialize();
+    await scheduler.processSheet();
+  } catch (error) {
+    console.error("Error in main function:", error);
+    process.exit(1);
+  }
 }
 
-// Run the script
-main().catch(console.error);
+// Run the script if called directly
+if (require.main === module) {
+  main().catch(console.error);
+}
 
 module.exports = SheetsScheduler;
