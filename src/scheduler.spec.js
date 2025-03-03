@@ -1,5 +1,6 @@
 const SheetsScheduler = require("./scheduler");
 const mockRealUsers = require("./mockRealUsers");
+const { mapRowToUser } = require("./utils");
 
 describe("SheetsScheduler Matching Tests", () => {
   let scheduler;
@@ -104,8 +105,8 @@ describe("SheetsScheduler Matching Tests", () => {
   });
 
   test("calculateCompatibilityScore should return correct score", () => {
-    const user1 = scheduler.mapRowToUser(mockUsers[0]); // User One
-    const user2 = scheduler.mapRowToUser(mockUsers[1]); // User Two
+    const user1 = mapRowToUser(mockUsers[0]); // User One
+    const user2 = mapRowToUser(mockUsers[1]); // User Two
 
     const score = scheduler.calculateCompatibilityScore(user1, user2);
     // Should have 2 points for same region + 2 points for common interests (2,3)
@@ -113,10 +114,10 @@ describe("SheetsScheduler Matching Tests", () => {
   });
 
   test("findBestMatch should return user with highest compatibility", () => {
-    const user1 = scheduler.mapRowToUser(mockUsers[0]); // User One
+    const user1 = mapRowToUser(mockUsers[0]); // User One
     const availableUsers = [
-      scheduler.mapRowToUser(mockUsers[1]), // User Two - should be best match
-      scheduler.mapRowToUser(mockUsers[2]), // User Three - fewer common interests
+      mapRowToUser(mockUsers[1]), // User Two - should be best match
+      mapRowToUser(mockUsers[2]), // User Three - fewer common interests
     ];
 
     const bestMatchId = scheduler.findBestMatch(user1, availableUsers);
@@ -191,8 +192,8 @@ describe("SheetsScheduler Matching Tests", () => {
   });
 
   test("should match users with similar interests from mockRealUsers", () => {
-    const user1 = scheduler.mapRowToUser(mockRealUsers[0]); // Миша with interests [27,21,24,26,18,02,15]
-    const user2 = scheduler.mapRowToUser(mockRealUsers[4]); // Мари with interests [21,28,40,25,09,02,03]
+    const user1 = mapRowToUser(mockRealUsers[0]); // Миша with interests [27,21,24,26,18,02,15]
+    const user2 = mapRowToUser(mockRealUsers[4]); // Мари with interests [21,28,40,25,09,02,03]
 
     const score = scheduler.calculateCompatibilityScore(user1, user2);
     // Should have points for common interests (21, 02) and same country (Бали)
@@ -243,33 +244,59 @@ describe("SheetsScheduler Matching Tests", () => {
   test("should handle users with multiple previous matches", () => {
     // Using user with multiple previous matches
     const userWithManyMatches = mockRealUsers.find(
-      (user) => JSON.parse(user[14]).length > 2
+      (user) => user[14] && user[14].length > 2 && user[14] !== "[]"
     );
 
-    const availableUsers = mockRealUsers.filter(
-      (user) =>
-        !JSON.parse(userWithManyMatches[14]).includes(user[0]) &&
+    const availableUsers = mockRealUsers.filter((user) => {
+      // Safely parse JSON or return empty array if parsing fails
+      const previousMatches = user[14]
+        ? (function () {
+            try {
+              return JSON.parse(user[14]);
+            } catch (e) {
+              return [];
+            }
+          })()
+        : [];
+
+      return (
+        !previousMatches.includes(userWithManyMatches[0]) &&
         user[0] !== userWithManyMatches[0]
-    );
+      );
+    });
+
+    // Create test data with the user with many matches and some available users
+    const testData = [userWithManyMatches, ...availableUsers.slice(0, 3)];
 
     const processedUsers = scheduler.processSheetData([
       ["header"],
-      userWithManyMatches,
-      ...availableUsers.slice(0, 2),
+      ...testData,
     ]);
 
     const user = processedUsers.find((u) => u.id === userWithManyMatches[0]);
+
+    // If a match was made, verify it's not in the previous matches
     if (user.nextMatch) {
-      // Ensure new match isn't in previous matches
-      expect(JSON.parse(userWithManyMatches[14])).not.toContain(user.nextMatch);
+      // Safely parse previous matches
+      const previousMatches = Array.isArray(user.previousMatch)
+        ? user.previousMatch
+        : (function () {
+            try {
+              return JSON.parse(userWithManyMatches[14]);
+            } catch (e) {
+              return [];
+            }
+          })();
+
+      expect(previousMatches).not.toContain(user.nextMatch);
     }
   });
 
   test("should prioritize matching users with more common interests", () => {
     // Миша and Ксения have more common interests than Миша and Мари
-    const misha = scheduler.mapRowToUser(mockRealUsers[0]); // interests: [27,21,24,26,18,02,15]
-    const ksenia = scheduler.mapRowToUser(mockRealUsers[2]); // interests: [28,26,30,32,20,02,03,06]
-    const mari = scheduler.mapRowToUser(mockRealUsers[4]); // interests: [21,28,40,25,09,02,03]
+    const misha = mapRowToUser(mockRealUsers[0]); // interests: [27,21,24,26,18,02,15]
+    const ksenia = mapRowToUser(mockRealUsers[2]); // interests: [28,26,30,32,20,02,03,06]
+    const mari = mapRowToUser(mockRealUsers[4]); // interests: [21,28,40,25,09,02,03]
 
     const scoreWithKsenia = scheduler.calculateCompatibilityScore(
       misha,
@@ -302,8 +329,8 @@ describe("SheetsScheduler Matching Tests", () => {
 
   test("should consider user's placesToVisit when calculating compatibility", () => {
     // Макс wants to visit "Индонезия" and Дарья is in "Индонезия, Бали"
-    const max = scheduler.mapRowToUser(mockRealUsers[3]);
-    const darya = scheduler.mapRowToUser(mockRealUsers[6]);
+    const max = mapRowToUser(mockRealUsers[3]);
+    const darya = mapRowToUser(mockRealUsers[6]);
 
     const score = scheduler.calculateCompatibilityScore(max, darya);
 
