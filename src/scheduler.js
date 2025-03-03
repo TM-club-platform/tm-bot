@@ -2,6 +2,8 @@ require("dotenv").config();
 
 const { google } = require("googleapis");
 
+const countriesWithoutRestrictedRegions = ["Бали", "Шри-Ланка"];
+
 class SheetsScheduler {
   constructor() {
     this.SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID;
@@ -140,7 +142,17 @@ class SheetsScheduler {
     }, {});
   }
 
-  findMatchesForCountry(countryUsers) {
+  groupUsersByRegion(users) {
+    return users.reduce((acc, user) => {
+      if (!acc[user.region]) {
+        acc[user.region] = [];
+      }
+      acc[user.region].push(user);
+      return acc;
+    }, {});
+  }
+
+  findMatchesInGroup(countryUsers) {
     const matches = new Map();
 
     const shuffledUsers = [...countryUsers]
@@ -206,9 +218,15 @@ class SheetsScheduler {
     const usersByCountry = this.groupUsersByCountry(users);
 
     for (const country in usersByCountry) {
-      const countryMatches = this.findMatchesForCountry(
-        usersByCountry[country]
-      );
+      let countryMatches = [];
+      if (!countriesWithoutRestrictedRegions.includes(country)) {
+        const usersByRegion = this.groupUsersByRegion(usersByCountry[country]);
+        for (const region in usersByRegion) {
+          countryMatches = this.findMatchesInGroup(usersByRegion[region]);
+        }
+      } else {
+        countryMatches = this.findMatchesInGroup(usersByCountry[country]);
+      }
 
       usersByCountry[country].forEach((user) => {
         user.nextMatch = countryMatches.get(user.id) || undefined;
