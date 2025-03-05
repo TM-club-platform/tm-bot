@@ -56,7 +56,7 @@ class SheetsScheduler extends BaseSheetsOperator {
 
     // Add points for same region
     if (user1.region && user2.region && user1.region === user2.region) {
-      score += 2;
+      score += 4;
     }
 
     // Add points for common interests
@@ -108,42 +108,46 @@ class SheetsScheduler extends BaseSheetsOperator {
    */
   findMatchesInGroup(groupUsers) {
     const matches = new Map();
-
-    // Filter out users who want to skip and shuffle for randomness
-    const shuffledUsers = [...groupUsers]
-      .filter((user) => !user.skip)
-      .sort(() => Math.random() - 0.5);
-
-    let availableIds = new Set(shuffledUsers.map((user) => user.id));
-
-    for (let i = 0; i < shuffledUsers.length; i++) {
-      const currentUser = shuffledUsers[i];
-
-      // Skip if user already has a match
-      if (!currentUser || matches.has(currentUser.id)) continue;
-
-      const matchId = this.findMatchForUser(
-        currentUser,
-        shuffledUsers,
-        availableIds,
-        matches
-      );
-
-      if (matchId) {
-        this.recordMatch(
-          currentUser,
-          matchId,
-          shuffledUsers,
-          matches,
-          availableIds
-        );
-      } else {
-        console.warn(
-          `No match found for user ${currentUser.id} in ${currentUser.country}`
-        );
+    
+    // Filter out users who want to skip
+    const activeUsers = groupUsers.filter(user => !user.skip);
+    
+    // Create compatibility matrix
+    const compatibilityScores = new Map();
+    
+    // Calculate compatibility scores for all possible pairs
+    for (let i = 0; i < activeUsers.length; i++) {
+      for (let j = i + 1; j < activeUsers.length; j++) {
+        const user1 = activeUsers[i];
+        const user2 = activeUsers[j];
+        const score = this.calculateCompatibilityScore(user1, user2);
+        const pairKey = `${user1.id}-${user2.id}`;
+        compatibilityScores.set(pairKey, score);
       }
     }
-
+    
+    // Sort pairs by score in descending order
+    const sortedPairs = Array.from(compatibilityScores.entries())
+      .sort(([, score1], [, score2]) => score2 - score1);
+    
+    const matchedUsers = new Set();
+    
+    // Match users starting from highest compatibility scores
+    for (const [pairKey, score] of sortedPairs) {
+      const [user1Id, user2Id] = pairKey.split('-');
+      
+      // Skip if either user is already matched
+      if (matchedUsers.has(user1Id) || matchedUsers.has(user2Id)) {
+        continue;
+      }
+      
+      // Record the match
+      matches.set(user1Id, user2Id);
+      matches.set(user2Id, user1Id);
+      matchedUsers.add(user1Id);
+      matchedUsers.add(user2Id);
+    }
+    
     return matches;
   }
 
