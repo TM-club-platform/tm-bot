@@ -17,7 +17,7 @@ class SheetsScheduler extends BaseSheetsOperator {
   constructor() {
     super();
     this.SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID;
-    this.SHEET_RANGE = "A1:P200";
+    this.SHEET_RANGE = "A1:P1000";
   }
 
   /**
@@ -244,6 +244,7 @@ class SheetsScheduler extends BaseSheetsOperator {
 
     // Process each country
     for (const country in usersByCountry) {
+      console.log(`\n=== Processing ${country} ===`);
       let countryMatches;
 
       if (!CONSTANTS.COUNTRIES_WITHOUT_RESTRICTED_REGIONS.includes(country)) {
@@ -252,8 +253,38 @@ class SheetsScheduler extends BaseSheetsOperator {
         countryMatches = this.findMatchesInGroup(usersByCountry[country]);
       }
 
+      // Найдем пользователей без пары
+      const unmatchedUsers = usersByCountry[country].filter(user => {
+        const hasMatch = countryMatches.get(user.id.toString());
+        if (!hasMatch && !user.skip) {
+          console.log(`Unmatched user: ${user.name} (${user.id})`);
+          console.log(`  Previous matches: ${user.previousMatch || 'none'}`);
+          console.log(`  Region: ${user.region}`);
+          
+          // Покажем с кем этот пользователь мог бы быть в паре
+          const potentialMatches = usersByCountry[country]
+            .filter(potentialMatch => 
+              potentialMatch.id !== user.id && 
+              !potentialMatch.skip &&
+              !(user.previousMatch || []).includes(potentialMatch.id.toString()) &&
+              !countryMatches.get(potentialMatch.id.toString())
+            );
+          
+          if (potentialMatches.length > 0) {
+            console.log('  Potential matches were:');
+            potentialMatches.forEach(match => {
+              console.log(`    - ${match.name} (${match.id}) in ${match.region}`);
+            });
+          } else {
+            console.log('  No potential matches were available');
+          }
+        }
+        return !hasMatch && !user.skip;
+      });
+
+      console.log(`\nTotal unmatched in ${country}: ${unmatchedUsers.length}`);
+
       usersByCountry[country].forEach((user) => {
-        // Приведение ID к строке при поиске матча
         const matchId = countryMatches.get(user.id.toString());
         user.nextMatch = matchId;
       });
