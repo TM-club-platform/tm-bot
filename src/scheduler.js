@@ -46,6 +46,15 @@ class SheetsScheduler extends BaseSheetsOperator {
   }
 
   /**
+   * Normalize ID by removing leading apostrophe if present
+   * @param {string} id - ID to normalize
+   * @returns {string} Normalized ID
+   */
+  normalizeId(id) {
+    return id ? id.toString().replace(/^'/, "") : id;
+  }
+
+  /**
    * Calculate compatibility score between two users
    * @param {Object} user1 - First user
    * @param {Object} user2 - Second user
@@ -108,46 +117,61 @@ class SheetsScheduler extends BaseSheetsOperator {
    */
   findMatchesInGroup(groupUsers) {
     const matches = new Map();
-    
+
     // Filter out users who want to skip
-    const activeUsers = groupUsers.filter(user => !user.skip);
-    
+    const activeUsers = groupUsers.filter((user) => !user.skip);
+
     // Create compatibility matrix
     const compatibilityScores = new Map();
-    
+
     // Calculate compatibility scores for all possible pairs
     for (let i = 0; i < activeUsers.length; i++) {
       for (let j = i + 1; j < activeUsers.length; j++) {
         const user1 = activeUsers[i];
         const user2 = activeUsers[j];
+
+        // Проверяем, не было ли предыдущих матчей
+        const previouslyMatched =
+          (user1.previousMatch || []).some(
+            (id) => id.toString() === user2.id.toString()
+          ) ||
+          (user2.previousMatch || []).some(
+            (id) => id.toString() === user1.id.toString()
+          );
+
+        if (previouslyMatched) {
+          continue;
+        }
+
         const score = this.calculateCompatibilityScore(user1, user2);
         const pairKey = `${user1.id}-${user2.id}`;
         compatibilityScores.set(pairKey, score);
       }
     }
-    
+
     // Sort pairs by score in descending order
-    const sortedPairs = Array.from(compatibilityScores.entries())
-      .sort(([, score1], [, score2]) => score2 - score1);
-    
+    const sortedPairs = Array.from(compatibilityScores.entries()).sort(
+      ([, score1], [, score2]) => score2 - score1
+    );
+
     const matchedUsers = new Set();
-    
+
     // Match users starting from highest compatibility scores
     for (const [pairKey, score] of sortedPairs) {
-      const [user1Id, user2Id] = pairKey.split('-');
-      
+      const [user1Id, user2Id] = pairKey.split("-");
+
       // Skip if either user is already matched
       if (matchedUsers.has(user1Id) || matchedUsers.has(user2Id)) {
         continue;
       }
-      
+
       // Record the match
-      matches.set(user1Id, user2Id);
-      matches.set(user2Id, user1Id);
+      matches.set(user1Id.toString(), user2Id.toString());
+      matches.set(user2Id.toString(), user1Id.toString());
       matchedUsers.add(user1Id);
       matchedUsers.add(user2Id);
     }
-    
+
     return matches;
   }
 
@@ -160,23 +184,28 @@ class SheetsScheduler extends BaseSheetsOperator {
    * @param {Set} availableIds - Set of available user IDs
    */
   recordMatch(user, matchId, allUsers, matches, availableIds) {
+    const normalizedUserId = this.normalizeId(user.id);
+    const normalizedMatchId = this.normalizeId(matchId);
+
     // Record the match in both directions
-    matches.set(user.id, matchId);
-    matches.set(matchId, user.id);
+    matches.set(normalizedUserId, normalizedMatchId);
+    matches.set(normalizedMatchId, normalizedUserId);
 
     // Update previous matches for both users
     user.previousMatch = user.previousMatch || [];
-    user.previousMatch.push(matchId);
+    user.previousMatch.push(normalizedMatchId);
 
-    const matchedUser = allUsers.find((u) => u.id === matchId);
+    const matchedUser = allUsers.find(
+      (u) => this.normalizeId(u.id) === normalizedMatchId
+    );
     if (matchedUser) {
       matchedUser.previousMatch = matchedUser.previousMatch || [];
-      matchedUser.previousMatch.push(user.id);
+      matchedUser.previousMatch.push(normalizedUserId);
     }
 
     // Remove both users from available pool
-    availableIds.delete(matchId);
-    availableIds.delete(user.id);
+    availableIds.delete(normalizedMatchId);
+    availableIds.delete(normalizedUserId);
   }
 
   /**
@@ -218,16 +247,15 @@ class SheetsScheduler extends BaseSheetsOperator {
       let countryMatches;
 
       if (!CONSTANTS.COUNTRIES_WITHOUT_RESTRICTED_REGIONS.includes(country)) {
-        // For countries with region restrictions, match within regions
         countryMatches = this.matchUsersWithinRegions(usersByCountry[country]);
       } else {
-        // For countries without region restrictions, match within country
         countryMatches = this.findMatchesInGroup(usersByCountry[country]);
       }
 
-      // Update next match for each user in the country
       usersByCountry[country].forEach((user) => {
-        user.nextMatch = countryMatches.get(user.id) || undefined;
+        // Приведение ID к строке при поиске матча
+        const matchId = countryMatches.get(user.id.toString());
+        user.nextMatch = matchId;
       });
     }
 
