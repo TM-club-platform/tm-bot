@@ -254,29 +254,33 @@ class SheetsScheduler extends BaseSheetsOperator {
       }
 
       // Найдем пользователей без пары
-      const unmatchedUsers = usersByCountry[country].filter(user => {
+      const unmatchedUsers = usersByCountry[country].filter((user) => {
         const hasMatch = countryMatches.get(user.id.toString());
         if (!hasMatch && !user.skip) {
           console.log(`Unmatched user: ${user.name} (${user.id})`);
-          console.log(`  Previous matches: ${user.previousMatch || 'none'}`);
+          console.log(`  Previous matches: ${user.previousMatch || "none"}`);
           console.log(`  Region: ${user.region}`);
-          
+
           // Покажем с кем этот пользователь мог бы быть в паре
-          const potentialMatches = usersByCountry[country]
-            .filter(potentialMatch => 
-              potentialMatch.id !== user.id && 
+          const potentialMatches = usersByCountry[country].filter(
+            (potentialMatch) =>
+              potentialMatch.id !== user.id &&
               !potentialMatch.skip &&
-              !(user.previousMatch || []).includes(potentialMatch.id.toString()) &&
+              !(user.previousMatch || []).includes(
+                potentialMatch.id.toString()
+              ) &&
               !countryMatches.get(potentialMatch.id.toString())
-            );
-          
+          );
+
           if (potentialMatches.length > 0) {
-            console.log('  Potential matches were:');
-            potentialMatches.forEach(match => {
-              console.log(`    - ${match.name} (${match.id}) in ${match.region}`);
+            console.log("  Potential matches were:");
+            potentialMatches.forEach((match) => {
+              console.log(
+                `    - ${match.name} (${match.id}) in ${match.region}`
+              );
             });
           } else {
-            console.log('  No potential matches were available');
+            console.log("  No potential matches were available");
           }
         }
         return !hasMatch && !user.skip;
@@ -323,7 +327,9 @@ class SheetsScheduler extends BaseSheetsOperator {
   async updateProcessedData(processedData) {
     try {
       const updateRange = "P2:P200";
-      const valuesToUpdate = processedData.map((row) => [row.nextMatch || ""]);
+      const valuesToUpdate = processedData.map((row) => [
+        row.nextMatch ? Number(row.nextMatch) : "",
+      ]);
 
       await this.updateSheetData(updateRange, valuesToUpdate);
     } catch (error) {
